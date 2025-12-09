@@ -16,7 +16,7 @@ source = { editable = "." }
 dependencies = [
     { name = "livekit-agents", extra = ["silero", "turn-detector"] },
     { name = "livekit-plugins-google" },
-    { name = "livekit-plugins-hedra" },
+    { name = "livekit-plugins-liveavatar" },
     { name = "livekit-plugins-noise-cancellation" },
     { name = "python-dotenv" },
 ]
@@ -32,9 +32,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "livekit-agents", extras = ["silero", "turn-detector"], specifier = "~=1.3" },
+    { name = "livekit-agents", extras = ["silero", "turn-detector"], specifier = "~=1.3.6" },
     { name = "livekit-plugins-google", specifier = ">=1.3.5" },
-    { name = "livekit-plugins-hedra", specifier = ">=1.3.5" },
+    { name = "livekit-plugins-liveavatar", specifier = ">=1.3.5" },
     { name = "livekit-plugins-noise-cancellation", specifier = "~=0.2" },
     { name = "python-dotenv" },
 ]
@@ -690,7 +690,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -1520,15 +1520,15 @@ wheels = [
 ]
 
 [[package]]
-name = "livekit-plugins-hedra"
+name = "livekit-plugins-liveavatar"
 version = "1.3.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "livekit-agents" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/df/03/b192dd814e33cdcbb9076f4fcd57e0511e51f2b73ed2c77cfb2ea1de0035/livekit_plugins_hedra-1.3.6.tar.gz", hash = "sha256:6151f886642ccebcc5e102bf6d7f8324fc717719ab4b6c99f9dff97d738ad978", size = 5145, upload-time = "2025-12-03T19:10:01.624Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/89/0b/6119af305d1675858b9720f3f6dd00b8f47823df06684a62739111150167/livekit_plugins_liveavatar-1.3.6.tar.gz", hash = "sha256:d54c7cc708273b9bbe4959fc1f4992a692f1e9166aa8afe8d2eb1b844ea3445f", size = 6544, upload-time = "2025-12-03T19:10:07.8Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/95/7d27bda01827133145a0837188c908764c2ca65907ebb7c6d7a2781bcb39/livekit_plugins_hedra-1.3.6-py3-none-any.whl", hash = "sha256:b968def0a3608aa0684b2d1c7b77a229ba0cb5296265295c07515950b0ca6ab7", size = 5188, upload-time = "2025-12-03T19:10:00.765Z" },
+    { url = "https://files.pythonhosted.org/packages/3d/dc/c5cbbdbf8c3e7e555f9cca5aff93d83a165839b267039360023a24cd00c3/livekit_plugins_liveavatar-1.3.6-py3-none-any.whl", hash = "sha256:03a7569da92ad900c40e6bcd640806d410229767c2bf3dabb791106cf1479c1f", size = 6621, upload-time = "2025-12-03T19:10:06.826Z" },
 ]
 
 [[package]]

@@ -1,4 +1,6 @@
+import json
 import logging
+import os
 
 from dotenv import load_dotenv
 from livekit import rtc
@@ -12,21 +14,67 @@ from livekit.agents import (
     inference,
     room_io,
 )
-from livekit.plugins import google, noise_cancellation, silero
+from livekit.plugins import google, liveavatar, noise_cancellation, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 logger = logging.getLogger("agent")
 
 load_dotenv(".env.local")
 
+# Map ISO 639-1 language codes to full language names for the LLM
+LANGUAGE_CODES = {
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "nl": "Dutch",
+    "tr": "Turkish",
+    "ru": "Russian",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "ar": "Arabic",
+    "hi": "Hindi",
+    "id": "Indonesian",
+    "pl": "Polish",
+    "sv": "Swedish",
+    "da": "Danish",
+    "no": "Norwegian",
+    "fi": "Finnish",
+    "el": "Greek",
+    "he": "Hebrew",
+    "th": "Thai",
+    "vi": "Vietnamese",
+    "uk": "Ukrainian",
+    "cs": "Czech",
+    "ro": "Romanian",
+    "hu": "Hungarian",
+}
+
+
+def get_language_name(code: str) -> str:
+    """Convert language code to full name, or return as-is if already a name."""
+    # If it's a 2-letter code, look it up
+    if len(code) == 2:
+        return LANGUAGE_CODES.get(code.lower(), code)
+    # Otherwise assume it's already a full name
+    return code
+
 
 class Assistant(Agent):
-    def __init__(self) -> None:
+    def __init__(self, user_language: str = "English") -> None:
+        self.user_language = user_language
         super().__init__(
-            instructions="""You are a helpful voice AI assistant. The user is interacting with you via voice, even if you perceive the conversation as text.
-            You eagerly assist users with their questions by providing information from your extensive knowledge.
-            Your responses are concise, to the point, and without any complex formatting or punctuation including emojis, asterisks, or other symbols.
-            You are curious, friendly, and have a sense of humor.""",
+            instructions=f"""You are a helpful restaurant booking assistant. The user is interacting with you via voice.
+            You help users make reservations, check availability, and answer questions about the restaurant.
+            Your responses are concise, friendly, and conversational.
+            Keep your responses natural and to the point, without complex formatting, emojis, or asterisks.
+            
+            IMPORTANT: The user's preferred language is {user_language}. Start by speaking in {user_language}.
+            If the user switches to a different language, follow their lead and respond in that language.
+            Always match the language the user is currently speaking.""",
         )
 
     # To add tools, use the @function_tool decorator.
@@ -46,6 +94,13 @@ class Assistant(Agent):
     #
     #     return "sunny with a temperature of 70 degrees."
 
+    async def on_enter(self):
+        await self.session.generate_reply(
+            instructions=f"""Greet the user warmly in {self.user_language} and ask how you can help them 
+            with their restaurant reservation or inquiry. Keep it brief and natural.""",
+            allow_interruptions=True,
+        )
+
 
 server = AgentServer()
 
@@ -57,26 +112,43 @@ def prewarm(proc: JobProcess):
 server.setup_fnc = prewarm
 
 
-@server.rtc_session()
+@server.rtc_session(agent_name="ai-waiter")
 async def my_agent(ctx: JobContext):
     # Logging setup
-    # Add any other context you want in all log entries here
     ctx.log_context_fields = {
         "room": ctx.room.name,
     }
 
-    # Set up a voice AI pipeline using OpenAI, Cartesia, AssemblyAI, and the LiveKit turn detector
+    # Get user's preferred language from room metadata
+    # Frontend sends metadata like: {"language": "tr"} or {"language": "en"}
+    user_language = "English"  # Default fallback
+    if ctx.room.metadata:
+        try:
+            metadata = json.loads(ctx.room.metadata)
+            lang_code = metadata.get("language", "en")
+            user_language = get_language_name(lang_code)
+            logger.info(f"User language: {user_language} (from code: {lang_code})")
+        except json.JSONDecodeError:
+            # If metadata is plain text, try to convert it
+            user_language = get_language_name(ctx.room.metadata)
+            logger.info(f"User language from plain metadata: {user_language}")
+
+    # Set up voice AI pipeline
     session = AgentSession(
         # Speech-to-text (STT) is your agent's ears, turning the user's speech into text that the LLM can understand
+        # Use the multilingual model for auto-detection of user's language
         # See all available models at https://docs.livekit.io/agents/models/stt/
-        stt=inference.STT(model="assemblyai/universal-streaming", language="en"),
+        stt=inference.STT(model="assemblyai/universal-streaming-multilingual"),
         # A Large Language Model (LLM) is your agent's brain, processing user input and generating a response
         # See all available models at https://docs.livekit.io/agents/models/llm/
         llm=google.LLM(model="gemini-2.5-flash"),
         # Text-to-speech (TTS) is your agent's voice, turning the LLM's text into speech that the user can hear
+        # cartesia/sonic-3 supports 40+ languages and auto-detects from text
+        # The LiveAvatar plugin will automatically receive this audio for avatar generation
         # See all available models as well as voice selections at https://docs.livekit.io/agents/models/tts/
         tts=inference.TTS(
-            model="cartesia/sonic-3", voice="9626c31c-bec5-4cca-baa8-f8ba9e84c8bc"
+            model="cartesia/sonic-3",
+            voice="9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",  # Jacqueline - works with multilingual
         ),
         # VAD and turn detection are used to determine when the user is speaking and when the agent should respond
         # See more at https://docs.livekit.io/agents/build/turns
@@ -87,29 +159,26 @@ async def my_agent(ctx: JobContext):
         preemptive_generation=True,
     )
 
-    # To use a realtime model instead of a voice pipeline, use the following session setup instead.
-    # (Note: This is for the OpenAI Realtime API. For other providers, see https://docs.livekit.io/agents/models/realtime/))
-    # 1. Install livekit-agents[openai]
-    # 2. Set OPENAI_API_KEY in .env.local
-    # 3. Add `from livekit.plugins import openai` to the top of this file
-    # 4. Use the following session setup instead of the version above
-    # session = AgentSession(
-    #     llm=openai.realtime.RealtimeModel(voice="marin")
-    # )
+    # Initialize LiveAvatar if configured
+    # Set LIVEAVATAR_API_KEY and LIVEAVATAR_AVATAR_ID in your .env file
+    avatar_id = os.getenv("LIVEAVATAR_AVATAR_ID")
 
-    # # Add a virtual avatar to the session, if desired
-    # # For other providers, see https://docs.livekit.io/agents/models/avatar/
-    # avatar = hedra.AvatarSession(
-    #   avatar_id="...",  # See https://docs.livekit.io/agents/models/avatar/plugins/hedra
-    # )
-    # # Start the avatar and wait for it to join
-    # await avatar.start(session, room=ctx.room)
+    if avatar_id:
+        logger.info(f"Initializing LiveAvatar with avatar_id: {avatar_id}")
+        avatar = liveavatar.AvatarSession(avatar_id=avatar_id)
+
+        # Start the avatar and wait for it to join the room
+        await avatar.start(session, room=ctx.room)
+        logger.info("LiveAvatar started and joined the room")
+    else:
+        logger.info("LiveAvatar disabled (LIVEAVATAR_AVATAR_ID not set)")
 
     # Start the session, which initializes the voice pipeline and warms up the models
     await session.start(
-        agent=Assistant(),
+        agent=Assistant(user_language=user_language),
         room=ctx.room,
         room_options=room_io.RoomOptions(
+            delete_room_on_close=True,
             audio_input=room_io.AudioInputOptions(
                 noise_cancellation=lambda params: noise_cancellation.BVCTelephony()
                 if params.participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP
@@ -120,6 +189,7 @@ async def my_agent(ctx: JobContext):
 
     # Join the room and connect to the user
     await ctx.connect()
+
 
 
 if __name__ == "__main__":
