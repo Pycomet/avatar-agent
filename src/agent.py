@@ -96,9 +96,8 @@ class Assistant(Agent):
 
     async def on_enter(self):
         await self.session.generate_reply(
-            instructions=f"""Greet the user warmly in {self.user_language} and ask how you can help them 
-            with their restaurant reservation or inquiry. Keep it brief and natural.""",
-            allow_interruptions=True,
+            instructions=f"""Greet the user warmly in {self.user_language} and say this exactly - Hello, how can I help you today?""",
+            allow_interruptions=False,
         )
 
 
