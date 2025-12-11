@@ -14,7 +14,7 @@ from livekit.agents import (
     inference,
     room_io,
 )
-from livekit.plugins import google, liveavatar, noise_cancellation, silero
+from livekit.plugins import anam, google, noise_cancellation, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 logger = logging.getLogger("agent")
@@ -143,7 +143,7 @@ async def my_agent(ctx: JobContext):
         llm=google.LLM(model="gemini-2.5-flash"),
         # Text-to-speech (TTS) is your agent's voice, turning the LLM's text into speech that the user can hear
         # cartesia/sonic-3 supports 40+ languages and auto-detects from text
-        # The LiveAvatar plugin will automatically receive this audio for avatar generation
+        # The Anam avatar plugin will automatically receive this audio for avatar generation
         # See all available models as well as voice selections at https://docs.livekit.io/agents/models/tts/
         tts=inference.TTS(
             model="cartesia/sonic-3",
@@ -158,19 +158,21 @@ async def my_agent(ctx: JobContext):
         preemptive_generation=True,
     )
 
-    # Initialize LiveAvatar if configured
-    # Set LIVEAVATAR_API_KEY and LIVEAVATAR_AVATAR_ID in your .env file
-    avatar_id = os.getenv("LIVEAVATAR_AVATAR_ID")
+    # Initialize Anam avatar if configured
+    # Set ANAM_API_KEY and ANAM_AVATAR_ID in your .env file
+    avatar_id = os.getenv("ANAM_AVATAR_ID")
 
     if avatar_id:
-        logger.info(f"Initializing LiveAvatar with avatar_id: {avatar_id}")
-        avatar = liveavatar.AvatarSession(avatar_id=avatar_id)
+        logger.info(f"Initializing Anam with avatar_id: {avatar_id}")
+        avatar = anam.AvatarSession(
+            persona_config=anam.PersonaConfig(name="Sofia", avatarId=avatar_id),
+        )
 
         # Start the avatar and wait for it to join the room
         await avatar.start(session, room=ctx.room)
-        logger.info("LiveAvatar started and joined the room")
+        logger.info("Anam avatar started and joined the room")
     else:
-        logger.info("LiveAvatar disabled (LIVEAVATAR_AVATAR_ID not set)")
+        logger.info("Anam avatar disabled (ANAM_AVATAR_ID not set)")
 
     # Start the session, which initializes the voice pipeline and warms up the models
     await session.start(
@@ -188,7 +190,6 @@ async def my_agent(ctx: JobContext):
 
     # Join the room and connect to the user
     await ctx.connect()
-
 
 
 if __name__ == "__main__":
