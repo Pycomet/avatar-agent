@@ -14,7 +14,7 @@ from livekit.agents import (
     inference,
     room_io,
 )
-from livekit.plugins import anam, google, noise_cancellation, silero
+from livekit.plugins import anam, google, liveavatar, noise_cancellation, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 logger = logging.getLogger("agent")
@@ -118,17 +118,25 @@ async def my_agent(ctx: JobContext):
         "room": ctx.room.name,
     }
 
-    # Get user's preferred language from room metadata
-    # Frontend sends metadata like: {"language": "tr"} or {"language": "en"}
+    # Get user's preferred language and avatar provider from room metadata
+    # Frontend sends metadata like: {"language": "tr", "avatar_provider": "anam"}
+    # avatar_provider can be: "anam", "liveavatar", or "none"
     user_language = "English"  # Default fallback
+    avatar_provider = "none"   # Default: no avatar
+    
     if ctx.room.metadata:
         try:
             metadata = json.loads(ctx.room.metadata)
+            # Parse language
             lang_code = metadata.get("language", "en")
             user_language = get_language_name(lang_code)
             logger.info(f"User language: {user_language} (from code: {lang_code})")
+            
+            # Parse avatar provider
+            avatar_provider = metadata.get("avatar_provider", "none").lower()
+            logger.info(f"Avatar provider requested: {avatar_provider}")
         except json.JSONDecodeError:
-            # If metadata is plain text, try to convert it
+            # If metadata is plain text, try to convert it as language
             user_language = get_language_name(ctx.room.metadata)
             logger.info(f"User language from plain metadata: {user_language}")
 
@@ -158,21 +166,40 @@ async def my_agent(ctx: JobContext):
         preemptive_generation=True,
     )
 
-    # Initialize Anam avatar if configured
-    # Set ANAM_API_KEY and ANAM_AVATAR_ID in your .env file
-    avatar_id = os.getenv("ANAM_AVATAR_ID")
+    # Initialize avatar based on frontend request (via room metadata)
+    # Set ANAM_API_KEY + ANAM_AVATAR_ID or LIVEAVATAR_ID in your .env file
+    if avatar_provider == "anam":
+        avatar_id = os.getenv("ANAM_AVATAR_ID")
+        if avatar_id:
+            logger.info(f"Initializing Anam avatar with id: {avatar_id}")
+            try:
+                avatar = anam.AvatarSession(
+                    persona_config=anam.PersonaConfig(name="Sofia", avatarId=avatar_id),
+                )
+                await avatar.start(session, room=ctx.room)
+                logger.info("Anam avatar started successfully")
+            except Exception as e:
+                logger.warning(f"Anam avatar failed (continuing voice-only): {e}")
+        else:
+            logger.warning("avatar_provider=anam but ANAM_AVATAR_ID env var not set")
 
-    if avatar_id:
-        logger.info(f"Initializing Anam with avatar_id: {avatar_id}")
-        avatar = anam.AvatarSession(
-            persona_config=anam.PersonaConfig(name="Sofia", avatarId=avatar_id),
-        )
+    elif avatar_provider == "liveavatar":
+        liveavatar_id = os.getenv("LIVEAVATAR_ID")
+        if liveavatar_id:
+            logger.info(f"Initializing LiveAvatar with id: {liveavatar_id}")
+            try:
+                avatar = liveavatar.AvatarSession(
+                    avatar=liveavatar.Avatar(avatar_id=liveavatar_id),
+                )
+                await avatar.start(session, room=ctx.room)
+                logger.info("LiveAvatar started successfully")
+            except Exception as e:
+                logger.warning(f"LiveAvatar failed (continuing voice-only): {e}")
+        else:
+            logger.warning("avatar_provider=liveavatar but LIVEAVATAR_ID env var not set")
 
-        # Start the avatar and wait for it to join the room
-        await avatar.start(session, room=ctx.room)
-        logger.info("Anam avatar started and joined the room")
     else:
-        logger.info("Anam avatar disabled (ANAM_AVATAR_ID not set)")
+        logger.info("No avatar requested (voice-only mode)")
 
     # Start the session, which initializes the voice pipeline and warms up the models
     await session.start(
