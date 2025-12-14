@@ -2,6 +2,7 @@ import json
 import logging
 import os
 
+import httpx
 from dotenv import load_dotenv
 from livekit import rtc
 from livekit.agents import (
@@ -10,12 +11,16 @@ from livekit.agents import (
     AgentSession,
     JobContext,
     JobProcess,
+    RunContext,
     cli,
+    function_tool,
     inference,
     room_io,
 )
 from livekit.plugins import anam, google, liveavatar, noise_cancellation, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
+
+from menu_data import find_item_by_name, get_all_items, get_item_by_id
 
 logger = logging.getLogger("agent")
 
@@ -66,33 +71,134 @@ def get_language_name(code: str) -> str:
 class Assistant(Agent):
     def __init__(self, user_language: str = "English") -> None:
         self.user_language = user_language
+        self.current_order = []  # Track current order items
         super().__init__(
             instructions=f"""You are a helpful restaurant booking assistant. The user is interacting with you via voice.
             You help users make reservations, check availability, and answer questions about the restaurant.
             Your responses are concise, friendly, and conversational.
             Keep your responses natural and to the point, without complex formatting, emojis, or asterisks.
             
+            You can help users:
+            - Answer questions about the menu (what's available, ingredients, prices, categories)
+            - Show images of menu items when they ask to see a specific dish
+            - Place orders by collecting items and any special requests
+            
+            When discussing the menu:
+            - Don't read the entire menu unless asked - answer specific questions naturally
+            - For "what do you have" or "what's on the menu", give a brief overview of categories or highlight a few items
+            - When asked about specific items (ingredients, price), provide details for just that item
+            - Offer to show images when discussing specific dishes
+            
             IMPORTANT: The user's preferred language is {user_language}. Start by speaking in {user_language}.
             If the user switches to a different language, follow their lead and respond in that language.
             Always match the language the user is currently speaking.""",
         )
 
-    # To add tools, use the @function_tool decorator.
-    # Here's an example that adds a simple weather tool.
-    # You also have to add `from livekit.agents import function_tool, RunContext` to the top of this file
-    # @function_tool
-    # async def lookup_weather(self, context: RunContext, location: str):
-    #     """Use this tool to look up current weather information in the given location.
-    #
-    #     If the location is not supported by the weather service, the tool will indicate this. You must tell the user the location's weather is unavailable.
-    #
-    #     Args:
-    #         location: The location to look up weather information for (e.g. city name)
-    #     """
-    #
-    #     logger.info(f"Looking up weather for {location}")
-    #
-    #     return "sunny with a temperature of 70 degrees."
+    @function_tool
+    async def get_menu(self, context: RunContext, category: str = ""):
+        """Get restaurant menu items, optionally filtered by category.
+        
+        Use this tool when the user asks about the menu, available items, or specific types of food.
+        You should interpret the results and answer the user's question naturally - don't read
+        the entire list unless specifically asked.
+        
+        Args:
+            category: Optional category filter (e.g., "Appetizers", "Mains", "Desserts", "Drinks").
+                     Leave empty to get all items.
+        
+        Returns structured data about menu items that you can use to answer questions.
+        """
+        logger.info(f"Fetching menu items (category: {category or 'all'})")
+        
+        menu_items = get_all_items()
+        
+        # Filter by category if specified
+        if category:
+            menu_items = [
+                item for item in menu_items 
+                if item['category'].lower() == category.lower()
+            ]
+        
+        # Return structured data for the LLM to interpret naturally
+        return json.dumps(menu_items, indent=2)
+    
+    @function_tool
+    async def show_item(self, context: RunContext, item_name: str):
+        """Show an image of a specific menu item to the user.
+        
+        Use this when the user asks to see what a dish looks like or wants a visual.
+        
+        Args:
+            item_name: The name of the menu item (e.g., "Bruschetta", "pasta", "pizza")
+                      Partial names work - will match the first item found.
+        """
+        logger.info(f"Showing image for item: {item_name}")
+        
+        # Try to find by name (more natural for users)
+        item = find_item_by_name(item_name)
+        
+        # Fallback to ID search if name doesn't work
+        if not item:
+            item = get_item_by_id(item_name)
+        
+        if not item:
+            return f"Sorry, I couldn't find '{item_name}' on the menu."
+        
+        # Send data message to frontend to display the image
+        data_payload = json.dumps({
+            "type": "show_image",
+            "url": item["image_url"],
+            "title": item["name"],
+        })
+        
+        await context.room.local_participant.publish_data(
+            data_payload.encode("utf-8"),
+            reliable=True,
+        )
+        
+        return f"Showing you an image of {item['name']}"
+    
+    @function_tool
+    async def place_order(self, context: RunContext, items: str, notes: str = ""):
+        """Place an order with the restaurant.
+        
+        Use this when the user is ready to finalize their order.
+        
+        Args:
+            items: A JSON string of items and quantities, e.g., '[{"id": "1", "quantity": 2}]'
+            notes: Any special requests or notes for the order (optional)
+        """
+        logger.info(f"Placing order: {items} with notes: {notes}")
+        
+        try:
+            order_items = json.loads(items)
+        except json.JSONDecodeError:
+            return "Sorry, I couldn't understand the order format. Please try again."
+        
+        # Get ORDER_API_URL from environment
+        api_url = os.getenv("ORDER_API_URL")
+        if not api_url:
+            logger.warning("ORDER_API_URL not set, logging order locally")
+            return f"Order received: {len(order_items)} items. Notes: {notes or 'None'}"
+        
+        # Send order to NextJS API
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    api_url,
+                    json={
+                        "items": order_items,
+                        "notes": notes,
+                        "room_id": context.room.name,
+                    },
+                    timeout=10.0,
+                )
+                response.raise_for_status()
+                
+            return f"Order successfully placed! {len(order_items)} items ordered."
+        except Exception as e:
+            logger.error(f"Failed to submit order: {e}")
+            return "Sorry, there was an error submitting your order. Please try again."
 
     async def on_enter(self):
         await self.session.generate_reply(

@@ -14,6 +14,7 @@ dependencies = [
     "livekit-plugins-liveavatar>=1.3.5",
     "livekit-plugins-noise-cancellation~=0.2",
     "python-dotenv",
+    "httpx",
 ]
 
 [dependency-groups]
