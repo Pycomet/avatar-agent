@@ -228,7 +228,7 @@ async def my_agent(ctx: JobContext):
     # Frontend sends metadata like: {"language": "tr", "avatar_provider": "anam"}
     # avatar_provider can be: "anam", "liveavatar", or "none"
     user_language = "English"  # Default fallback
-    avatar_provider = "liveavatar"   # Default: no avatar
+    avatar_provider = "liveavatar"   # Default: liveavatar
     
     if ctx.room.metadata:
         try:
@@ -273,7 +273,7 @@ async def my_agent(ctx: JobContext):
     )
 
     # Initialize avatar based on frontend request (via room metadata)
-    # Set ANAM_API_KEY + ANAM_AVATAR_ID or LIVEAVATAR_ID in your .env file
+    # Set ANAM_API_KEY + ANAM_AVATAR_ID or LIVEAVATAR_AVATAR_ID in your .env file
     if avatar_provider == "anam":
         avatar_id = os.getenv("ANAM_AVATAR_ID")
         if avatar_id:
@@ -290,19 +290,17 @@ async def my_agent(ctx: JobContext):
             logger.warning("avatar_provider=anam but ANAM_AVATAR_ID env var not set")
 
     elif avatar_provider == "liveavatar":
-        liveavatar_id = os.getenv("LIVEAVATAR_ID")
+        liveavatar_id = os.getenv("LIVEAVATAR_AVATAR_ID")
         if liveavatar_id:
             logger.info(f"Initializing LiveAvatar with id: {liveavatar_id}")
             try:
-                avatar = liveavatar.AvatarSession(
-                    avatar=liveavatar.Avatar(avatar_id=liveavatar_id),
-                )
+                avatar = liveavatar.AvatarSession(avatar_id=liveavatar_id)
                 await avatar.start(session, room=ctx.room)
                 logger.info("LiveAvatar started successfully")
             except Exception as e:
                 logger.warning(f"LiveAvatar failed (continuing voice-only): {e}")
         else:
-            logger.warning("avatar_provider=liveavatar but LIVEAVATAR_ID env var not set")
+            logger.warning("avatar_provider=liveavatar but LIVEAVATAR_AVATAR_ID env var not set")
 
     else:
         logger.info("No avatar requested (voice-only mode)")
