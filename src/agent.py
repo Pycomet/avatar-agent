@@ -289,7 +289,7 @@ async def my_agent(ctx: JobContext):
         else:
             logger.warning("avatar_provider=anam but ANAM_AVATAR_ID env var not set")
 
-    elif avatar_provider == "liveavatar":
+    else:
         liveavatar_id = os.getenv("LIVEAVATAR_ID")
         if liveavatar_id:
             logger.info(f"Initializing LiveAvatar with id: {liveavatar_id}")
@@ -304,8 +304,6 @@ async def my_agent(ctx: JobContext):
         else:
             logger.warning("avatar_provider=liveavatar but LIVEAVATAR_ID env var not set")
 
-    else:
-        logger.info("No avatar requested (voice-only mode)")
 
     # Start the session, which initializes the voice pipeline and warms up the models
     await session.start(
