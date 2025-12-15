@@ -1,0 +1,3 @@
+{"location": "agent.py:233", "message": "metadata_check", "data": {"has_metadata": false, "raw_metadata": "", "metadata_type": "str"}, "timestamp": 1765790212.804655, "sessionId": "debug-session", "hypothesisId": "H1"}
+{"location": "agent.py:263", "message": "no_metadata", "data": {"room_name": "session-mj6xwcgyypgvx"}, "timestamp": 1765790212.804727, "sessionId": "debug-session", "hypothesisId": "H1"}
+{"location": "agent.py:295", "message": "avatar_init_decision", "data": {"avatar_provider": "liveavatar", "will_use_anam": false, "will_use_liveavatar": true, "will_skip": false}, "timestamp": 1765790212.8564868, "sessionId": "debug-session", "hypothesisId": "H2,H3"}
