@@ -5,6 +5,7 @@ from livekit.agents import AgentSession, llm
 from livekit.plugins import google
 
 from agent import Assistant, get_language_name
+from menu_data import MenuData
 
 # Valid avatar providers (mirrors the set in agent.py)
 VALID_AVATAR_PROVIDERS = {"anam", "liveavatar", "none"}
@@ -14,6 +15,71 @@ def _llm() -> llm.LLM:
     return google.LLM(model="gemini-2.5-flash")
 
 
+def _mock_menu_data() -> MenuData:
+    """Create mock menu data for testing with nested structure."""
+    return MenuData(
+        {
+            "restaurants": [
+                {
+                    "id": "1",
+                    "name": "Test Italian Restaurant",
+                    "cuisine": "Italian",
+                    "image": "https://example.com/italian.jpg",
+                    "categories": [
+                        {
+                            "id": "appetizers",
+                            "name": "Appetizers",
+                            "items": [
+                                {
+                                    "id": "bruschetta",
+                                    "name": "Bruschetta",
+                                    "price": 8.99,
+                                    "description": "Fresh tomatoes on toasted bread",
+                                    "image": "https://example.com/bruschetta.jpg",
+                                },
+                            ],
+                        },
+                        {
+                            "id": "mains",
+                            "name": "Mains",
+                            "items": [
+                                {
+                                    "id": "pasta-carbonara",
+                                    "name": "Pasta Carbonara",
+                                    "price": 14.99,
+                                    "description": "Classic Roman pasta",
+                                    "image": "https://example.com/carbonara.jpg",
+                                },
+                            ],
+                        },
+                    ],
+                },
+                {
+                    "id": "2",
+                    "name": "Test Mexican Restaurant",
+                    "cuisine": "Mexican",
+                    "image": "https://example.com/mexican.jpg",
+                    "categories": [
+                        {
+                            "id": "tacos",
+                            "name": "Tacos",
+                            "items": [
+                                {
+                                    "id": "beef-tacos",
+                                    "name": "Beef Tacos",
+                                    "price": 10.99,
+                                    "description": "Three beef tacos",
+                                    "image": "https://example.com/tacos.jpg",
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+    )
+
+
 @pytest.mark.asyncio
 async def test_offers_assistance() -> None:
     """Evaluation of the agent's friendly nature."""
@@ -21,7 +87,7 @@ async def test_offers_assistance() -> None:
         _llm() as llm,
         AgentSession(llm=llm) as session,
     ):
-        await session.start(Assistant())
+        await session.start(Assistant(menu_data=_mock_menu_data()))
 
         # Run an agent turn following the user's greeting
         result = await session.run(user_input="Hello")
@@ -53,7 +119,7 @@ async def test_grounding() -> None:
         _llm() as llm,
         AgentSession(llm=llm) as session,
     ):
-        await session.start(Assistant())
+        await session.start(Assistant(menu_data=_mock_menu_data()))
 
         # Run an agent turn following the user's request for information about their birth city (not known by the agent)
         result = await session.run(user_input="What city was I born in?")
@@ -95,7 +161,7 @@ async def test_refuses_harmful_request() -> None:
         _llm() as llm,
         AgentSession(llm=llm) as session,
     ):
-        await session.start(Assistant())
+        await session.start(Assistant(menu_data=_mock_menu_data()))
 
         # Run an agent turn following an inappropriate request from the user
         result = await session.run(
@@ -123,12 +189,10 @@ async def test_responds_in_spanish() -> None:
         _llm() as llm,
         AgentSession(llm=llm) as session,
     ):
-        await session.start(Assistant())
+        await session.start(Assistant(menu_data=_mock_menu_data()))
 
         # User greets in Spanish
-        result = await session.run(
-            user_input="Hola, quisiera hacer una reservación para esta noche"
-        )
+        result = await session.run(user_input="Hola, quisiera pedir comida")
 
         # Evaluate that the agent responds in Spanish
         await (
@@ -141,7 +205,7 @@ async def test_responds_in_spanish() -> None:
 
                 The response should:
                 - Be entirely or predominantly in Spanish
-                - Acknowledge the reservation request or ask follow-up questions in Spanish
+                - Acknowledge the food order request or ask follow-up questions in Spanish
 
                 The response should NOT:
                 - Be in English
@@ -160,11 +224,11 @@ async def test_responds_in_french() -> None:
         _llm() as llm,
         AgentSession(llm=llm) as session,
     ):
-        await session.start(Assistant())
+        await session.start(Assistant(menu_data=_mock_menu_data()))
 
         # User greets in French
         result = await session.run(
-            user_input="Bonjour, je voudrais réserver une table pour deux personnes"
+            user_input="Bonjour, je voudrais commander de la nourriture"
         )
 
         # Evaluate that the agent responds in French
@@ -178,7 +242,7 @@ async def test_responds_in_french() -> None:
 
                 The response should:
                 - Be entirely or predominantly in French
-                - Acknowledge the reservation request or ask follow-up questions in French
+                - Acknowledge the food order request or ask follow-up questions in French
 
                 The response should NOT:
                 - Be in English
@@ -218,7 +282,9 @@ async def test_greets_in_turkish_with_language_code() -> None:
         AgentSession(llm=llm) as session,
     ):
         # Initialize agent with Turkish language
-        await session.start(Assistant(user_language="Turkish"))
+        await session.start(
+            Assistant(menu_data=_mock_menu_data(), user_language="Turkish")
+        )
 
         # User says hello (in any language, agent should respond in Turkish)
         result = await session.run(user_input="Merhaba")
@@ -235,7 +301,7 @@ async def test_greets_in_turkish_with_language_code() -> None:
                 The response should:
                 - Be entirely or predominantly in Turkish
                 - Be a warm greeting or acknowledgment
-                - Offer help with restaurant reservations in Turkish
+                - Offer help with food ordering in Turkish
 
                 The response should NOT:
                 - Be in English
@@ -255,7 +321,9 @@ async def test_greets_in_german_with_language_code() -> None:
         AgentSession(llm=llm) as session,
     ):
         # Initialize agent with German language
-        await session.start(Assistant(user_language="German"))
+        await session.start(
+            Assistant(menu_data=_mock_menu_data(), user_language="German")
+        )
 
         # User says hello (in any language, agent should respond in German)
         result = await session.run(user_input="Guten Tag")
@@ -272,7 +340,7 @@ async def test_greets_in_german_with_language_code() -> None:
                 The response should:
                 - Be entirely or predominantly in German
                 - Be a warm greeting or acknowledgment
-                - Offer help with restaurant reservations in German
+                - Offer help with food ordering in German
 
                 The response should NOT:
                 - Be in English
@@ -292,16 +360,18 @@ async def test_switches_language_when_user_changes() -> None:
         AgentSession(llm=llm) as session,
     ):
         # Start with English
-        await session.start(Assistant(user_language="English"))
+        await session.start(
+            Assistant(menu_data=_mock_menu_data(), user_language="English")
+        )
 
         # First interaction in English
-        result1 = await session.run(user_input="Hello, I'd like to make a reservation")
+        result1 = await session.run(user_input="Hello, I'd like to order some food")
         await (
             result1.expect.next_event()
             .is_message(role="assistant")
             .judge(
                 llm,
-                intent="Responds in English about the reservation request.",
+                intent="Responds in English about the food order request.",
             )
         )
 
@@ -320,6 +390,100 @@ async def test_switches_language_when_user_changes() -> None:
         )
 
         result2.expect.no_more_events()
+
+
+# --- Menu Data Tests ---
+
+
+def test_menu_data_get_restaurants():
+    """Test that menu data returns restaurants correctly."""
+    menu = _mock_menu_data()
+    restaurants = menu.get_all_restaurants()
+
+    assert len(restaurants) == 2
+    assert restaurants[0]["name"] == "Test Italian Restaurant"
+    assert restaurants[1]["name"] == "Test Mexican Restaurant"
+
+
+def test_menu_data_find_restaurant_by_name():
+    """Test finding restaurant by partial name match."""
+    menu = _mock_menu_data()
+
+    # Partial match
+    restaurant = menu.find_restaurant_by_name("Italian")
+    assert restaurant is not None
+    assert restaurant["id"] == "1"
+
+    # Case insensitive
+    restaurant = menu.find_restaurant_by_name("mexican")
+    assert restaurant is not None
+    assert restaurant["id"] == "2"
+
+    # Not found
+    restaurant = menu.find_restaurant_by_name("Chinese")
+    assert restaurant is None
+
+
+def test_menu_data_get_items_for_restaurant():
+    """Test getting items for a specific restaurant (nested structure)."""
+    menu = _mock_menu_data()
+
+    # Italian restaurant has 2 items (1 in Appetizers, 1 in Mains)
+    items = menu.get_items_for_restaurant("1")
+    assert len(items) == 2
+    item_names = [item["name"] for item in items]
+    assert "Bruschetta" in item_names
+    assert "Pasta Carbonara" in item_names
+
+    # Mexican restaurant has 1 item
+    items = menu.get_items_for_restaurant("2")
+    assert len(items) == 1
+    assert items[0]["name"] == "Beef Tacos"
+
+
+def test_menu_data_find_item_by_name():
+    """Test finding item by name with optional restaurant filter."""
+    menu = _mock_menu_data()
+
+    # Find across all restaurants
+    item = menu.find_item_by_name("Bruschetta")
+    assert item is not None
+    assert item["id"] == "bruschetta"
+
+    # Find within specific restaurant
+    item = menu.find_item_by_name("Tacos", restaurant_id="2")
+    assert item is not None
+    assert item["name"] == "Beef Tacos"
+
+    # Item from different restaurant not found when filtered
+    item = menu.find_item_by_name("Bruschetta", restaurant_id="2")
+    assert item is None
+
+
+def test_menu_data_get_categories():
+    """Test getting categories for a restaurant."""
+    menu = _mock_menu_data()
+
+    categories = menu.get_categories_for_restaurant("1")
+    assert len(categories) == 2
+    category_names = [c["name"] for c in categories]
+    assert "Appetizers" in category_names
+    assert "Mains" in category_names
+
+
+def test_menu_data_get_items_by_category_name():
+    """Test filtering items by category name."""
+    menu = _mock_menu_data()
+
+    # Get appetizers from Italian restaurant
+    items = menu.get_items_by_category_name("1", "Appetizers")
+    assert len(items) == 1
+    assert items[0]["name"] == "Bruschetta"
+
+    # Case insensitive
+    items = menu.get_items_by_category_name("1", "mains")
+    assert len(items) == 1
+    assert items[0]["name"] == "Pasta Carbonara"
 
 
 # --- Avatar Provider Validation Tests ---
