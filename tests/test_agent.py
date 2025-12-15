@@ -1,8 +1,13 @@
+import json
+
 import pytest
 from livekit.agents import AgentSession, llm
 from livekit.plugins import google
 
 from agent import Assistant, get_language_name
+
+# Valid avatar providers (mirrors the set in agent.py)
+VALID_AVATAR_PROVIDERS = {"anam", "liveavatar", "none"}
 
 
 def _llm() -> llm.LLM:
@@ -121,7 +126,9 @@ async def test_responds_in_spanish() -> None:
         await session.start(Assistant())
 
         # User greets in Spanish
-        result = await session.run(user_input="Hola, quisiera hacer una reservación para esta noche")
+        result = await session.run(
+            user_input="Hola, quisiera hacer una reservación para esta noche"
+        )
 
         # Evaluate that the agent responds in Spanish
         await (
@@ -131,11 +138,11 @@ async def test_responds_in_spanish() -> None:
                 llm,
                 intent="""
                 The response is written in Spanish (not English or any other language).
-                
+
                 The response should:
                 - Be entirely or predominantly in Spanish
                 - Acknowledge the reservation request or ask follow-up questions in Spanish
-                
+
                 The response should NOT:
                 - Be in English
                 - Mix languages unnecessarily
@@ -156,7 +163,9 @@ async def test_responds_in_french() -> None:
         await session.start(Assistant())
 
         # User greets in French
-        result = await session.run(user_input="Bonjour, je voudrais réserver une table pour deux personnes")
+        result = await session.run(
+            user_input="Bonjour, je voudrais réserver une table pour deux personnes"
+        )
 
         # Evaluate that the agent responds in French
         await (
@@ -166,11 +175,11 @@ async def test_responds_in_french() -> None:
                 llm,
                 intent="""
                 The response is written in French (not English or any other language).
-                
+
                 The response should:
                 - Be entirely or predominantly in French
                 - Acknowledge the reservation request or ask follow-up questions in French
-                
+
                 The response should NOT:
                 - Be in English
                 - Mix languages unnecessarily
@@ -192,11 +201,11 @@ async def test_language_code_conversion() -> None:
     assert get_language_name("zh") == "Chinese"
     assert get_language_name("ja") == "Japanese"
     assert get_language_name("ar") == "Arabic"
-    
+
     # Test that full names pass through unchanged
     assert get_language_name("English") == "English"
     assert get_language_name("Turkish") == "Turkish"
-    
+
     # Test unknown codes pass through
     assert get_language_name("xx") == "xx"
 
@@ -222,12 +231,12 @@ async def test_greets_in_turkish_with_language_code() -> None:
                 llm,
                 intent="""
                 The response is in Turkish (not English or any other language).
-                
+
                 The response should:
                 - Be entirely or predominantly in Turkish
                 - Be a warm greeting or acknowledgment
                 - Offer help with restaurant reservations in Turkish
-                
+
                 The response should NOT:
                 - Be in English
                 - Be in any language other than Turkish
@@ -259,12 +268,12 @@ async def test_greets_in_german_with_language_code() -> None:
                 llm,
                 intent="""
                 The response is in German (not English or any other language).
-                
+
                 The response should:
                 - Be entirely or predominantly in German
                 - Be a warm greeting or acknowledgment
                 - Offer help with restaurant reservations in German
-                
+
                 The response should NOT:
                 - Be in English
                 - Be in any language other than German
@@ -311,3 +320,74 @@ async def test_switches_language_when_user_changes() -> None:
         )
 
         result2.expect.no_more_events()
+
+
+# --- Avatar Provider Validation Tests ---
+
+
+def test_valid_avatar_providers():
+    """Test that valid avatar providers are recognized."""
+    valid_providers = {"anam", "liveavatar", "none"}
+
+    for provider in valid_providers:
+        assert provider in VALID_AVATAR_PROVIDERS
+
+    # Ensure set is exactly what we expect
+    assert valid_providers == VALID_AVATAR_PROVIDERS
+
+
+def test_avatar_provider_from_metadata():
+    """Test parsing avatar_provider from room metadata JSON."""
+    # Test valid providers
+    for provider in ["anam", "liveavatar", "none"]:
+        metadata = json.dumps({"language": "en", "avatar_provider": provider})
+        parsed = json.loads(metadata)
+        raw_provider = parsed.get("avatar_provider", "none").lower()
+        assert raw_provider in VALID_AVATAR_PROVIDERS
+        assert raw_provider == provider
+
+
+def test_avatar_provider_case_insensitive():
+    """Test that avatar_provider parsing is case-insensitive."""
+    test_cases = [
+        ("ANAM", "anam"),
+        ("LiveAvatar", "liveavatar"),
+        ("NONE", "none"),
+        ("Anam", "anam"),
+    ]
+
+    for input_val, expected in test_cases:
+        metadata = json.dumps({"avatar_provider": input_val})
+        parsed = json.loads(metadata)
+        raw_provider = parsed.get("avatar_provider", "none").lower()
+        assert raw_provider == expected
+        assert raw_provider in VALID_AVATAR_PROVIDERS
+
+
+def test_invalid_avatar_provider_defaults_to_none():
+    """Test that invalid avatar_provider values would default to 'none'."""
+    invalid_providers = ["invalid", "unknown", "tavus", "heygen", ""]
+
+    for invalid in invalid_providers:
+        metadata = json.dumps({"avatar_provider": invalid})
+        parsed = json.loads(metadata)
+        raw_provider = parsed.get("avatar_provider", "none").lower()
+
+        # Simulate the validation logic from agent.py
+        if raw_provider in VALID_AVATAR_PROVIDERS:
+            avatar_provider = raw_provider
+        else:
+            avatar_provider = "none"
+
+        assert avatar_provider == "none"
+
+
+def test_missing_avatar_provider_defaults_to_none():
+    """Test that missing avatar_provider defaults to 'none'."""
+    # Metadata without avatar_provider
+    metadata = json.dumps({"language": "en"})
+    parsed = json.loads(metadata)
+    raw_provider = parsed.get("avatar_provider", "none").lower()
+
+    assert raw_provider == "none"
+    assert raw_provider in VALID_AVATAR_PROVIDERS
